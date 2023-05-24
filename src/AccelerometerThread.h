@@ -3,6 +3,8 @@
 #include "configuration.h"
 #include "main.h"
 #include "power.h"
+#include "mqtt/MQTT.h"
+#include "NodeDB.h"
 
 #include <Adafruit_LIS3DH.h>
 #include <Adafruit_MPU6050.h>
@@ -91,6 +93,14 @@ class AccelerometerThread : public concurrency::OSThread
     }
 
     void reportMpu6050() {
+        // TODO: for now this is called each time the accelerometer thread
+        // spins, however it might be better to collect min/max/avg values
+        // during some period (during several accel thread loops) and report
+        // only occasionally, say, once per second or per ten seconds.
+
+        using std::string;
+        using std::to_string;
+
         sensors_event_t accel;
         sensors_event_t gyro;
         sensors_event_t temp;
@@ -99,12 +109,48 @@ class AccelerometerThread : public concurrency::OSThread
             LOG_WARN("Can't get MPU6050 accelerometer event\n");
             return;
         }
-        LOG_INFO("Acceleration: x %.4f y %.4f z %.4f, Rotation: yaw %.4f pitch "
-                 "%.4f roll %.4f, Temperature: %.2f\n",
-                 accel.acceleration.x, accel.acceleration.y,
-                 accel.acceleration.z, gyro.acceleration.heading,
-                 gyro.acceleration.pitch, gyro.acceleration.roll,
-                 temp.temperature);
+
+        string timestamp;
+        const uint64_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
+        static constexpr uint64_t millis_in_second{1000};
+        if (rtc_sec > 0) {
+            timestamp = to_string(rtc_sec * millis_in_second + millis());
+        } else {
+            timestamp = "\"undefined\"";
+        }
+
+        const string device_name{
+            (owner.short_name[0] != '\0') ? owner.short_name : "undefined"};
+
+        // example:
+        // {"device":"theo","time":1684925523038,"x":1.046266,"y":7.283162,"z":-5.889736,"t":28.012352}
+        string accel_message{"{"};
+        accel_message += "\"device\":\"" + device_name + "\"";
+        accel_message += ",\"time\":" + timestamp;
+        accel_message += ",\"x\":";
+        accel_message += to_string(accel.acceleration.x);
+        accel_message += ",\"y\":";
+        accel_message += to_string(accel.acceleration.y);
+        accel_message += ",\"z\":";
+        accel_message += to_string(accel.acceleration.z);
+        accel_message += ",\"t\":";
+        accel_message += to_string(temp.temperature);
+        accel_message += "}";
+
+        LOG_INFO("%s", accel_message.c_str());
+
+        if (mqtt && mqtt->connected()) {
+            string topic;
+            if (*moduleConfig.mqtt.root) {
+                topic += moduleConfig.mqtt.root;
+            }
+            // TODO: decide on a better topic name or a configurable topic name
+            // if necessary
+            topic += "/accelerometer";
+            mqtt->debugPublish(topic.c_str(), accel_message.c_str());
+        } else {
+            LOG_DEBUG("MQTT is not connected\n");
+        }
     }
 
     ScanI2C::DeviceType accelerometer_type;
