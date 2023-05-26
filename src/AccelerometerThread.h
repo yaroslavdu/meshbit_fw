@@ -12,6 +12,34 @@
 #define ACCELEROMETER_CHECK_INTERVAL_MS 100
 #define ACCELEROMETER_CLICK_THRESHOLD 40
 
+// TODO: move into a separate class file
+#include <algorithm>
+#include <list>
+#include <numeric>
+template <typename T> class Filter {
+public:
+  Filter(int size) : size_(size) {}
+  void update(T value) {
+    values_.push_back(value);
+    if (values_.size() > size_) {
+      values_.pop_front();
+    }
+  }
+  void reset() { values_.clear(); }
+  T min() { return *std::min_element(values_.begin(), values_.end()); }
+  T max() { return *std::max_element(values_.begin(), values_.end()); }
+  T avg() {
+    const T sum =
+        std::accumulate(values_.begin(), values_.end(), T(0), std::plus<T>());
+    const T avg = sum / static_cast<T>(std::max(values_.size(), size_t(1)));
+    return avg;
+  }
+
+private:
+  std::list<T> values_;
+  size_t size_{0};
+};
+
 namespace concurrency
 {
 class AccelerometerThread : public concurrency::OSThread
@@ -93,11 +121,6 @@ class AccelerometerThread : public concurrency::OSThread
     }
 
     void reportMpu6050() {
-        // TODO: for now this is called each time the accelerometer thread
-        // spins, however it might be better to collect min/max/avg values
-        // during some period (during several accel thread loops) and report
-        // only occasionally, say, once per second or per ten seconds.
-
         using std::string;
         using std::to_string;
 
@@ -109,6 +132,15 @@ class AccelerometerThread : public concurrency::OSThread
             LOG_WARN("Can't get MPU6050 accelerometer event\n");
             return;
         }
+
+        mpu6050_x_filter_.update(accel.acceleration.x);
+        mpu6050_y_filter_.update(accel.acceleration.y);
+        mpu6050_z_filter_.update(accel.acceleration.z);
+
+        if (report_counter_++ < reporting_period_) {
+            return;
+        }
+        report_counter_ = 0;
 
         string timestamp;
         const uint64_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
@@ -128,16 +160,16 @@ class AccelerometerThread : public concurrency::OSThread
         accel_message += "\"device\":\"" + device_name + "\"";
         accel_message += ",\"time\":" + timestamp;
         accel_message += ",\"x\":";
-        accel_message += to_string(accel.acceleration.x);
+        accel_message += to_string(mpu6050_x_filter_.avg());
         accel_message += ",\"y\":";
-        accel_message += to_string(accel.acceleration.y);
+        accel_message += to_string(mpu6050_y_filter_.avg());
         accel_message += ",\"z\":";
-        accel_message += to_string(accel.acceleration.z);
+        accel_message += to_string(mpu6050_z_filter_.avg());
         accel_message += ",\"t\":";
         accel_message += to_string(temp.temperature);
         accel_message += "}";
 
-        LOG_INFO("%s", accel_message.c_str());
+        LOG_INFO("%s\n", accel_message.c_str());
 
         if (mqtt && mqtt->connected()) {
             string topic;
@@ -156,6 +188,13 @@ class AccelerometerThread : public concurrency::OSThread
     ScanI2C::DeviceType accelerometer_type;
     Adafruit_MPU6050 mpu;
     Adafruit_LIS3DH lis;
+
+    int report_counter_{0};
+    const int reporting_period_{10};
+    const int accel_averaging_period_{20};
+    Filter<float> mpu6050_x_filter_{accel_averaging_period_};
+    Filter<float> mpu6050_y_filter_{accel_averaging_period_};
+    Filter<float> mpu6050_z_filter_{accel_averaging_period_};
 };
 
 } // namespace concurrency
