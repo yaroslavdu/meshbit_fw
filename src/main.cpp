@@ -173,6 +173,72 @@ __attribute__((weak, noinline)) bool loopCanSleep()
     return true;
 }
 
+// TEMP DELETEME
+// TODO: move to a separate module/class
+#include <SD.h>
+void initSdCard() {
+    LOG_DEBUG("SD card init start");
+    static constexpr auto HSPI_SCLK = 14;
+    static constexpr auto HSPI_MISO = 2; // 4;
+    static constexpr auto HSPI_MOSI = 13;
+    static constexpr auto HSPI_CS = 25; // 2;
+
+    SPIClass *hspi = nullptr;
+    String dataString = ""; // holds the data to be written to the SD card
+    File sensorData;
+
+    LOG_DEBUG("Instantiate SPIClas");
+    hspi = new SPIClass(HSPI);
+    hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI,
+                HSPI_CS);     // SCLK, MISO, MOSI, SS
+    pinMode(HSPI_CS, OUTPUT); // HSPI SS
+
+    LOG_DEBUG("Accessing SDCARD");
+    // see if the card is present and can be initialized:
+    if (!SD.begin(HSPI_CS)) {
+        LOG_DEBUG("Card failed, or not present");
+    }
+
+    uint8_t cardType = SD.cardType();
+    if (cardType == CARD_NONE) {
+        LOG_DEBUG("No SD_MMC card attached\n");
+        return;
+    }
+    LOG_DEBUG("SD_MMC Card Type: ");
+    if (cardType == CARD_MMC) {
+        LOG_DEBUG("MMC\n");
+    } else if (cardType == CARD_SD) {
+        LOG_DEBUG("SDSC\n");
+    } else if (cardType == CARD_SDHC) {
+        LOG_DEBUG("SDHC\n");
+    } else {
+        LOG_DEBUG("UNKNOWN\n");
+    }
+
+    uint64_t cardSize = SD.cardSize() / (1024 * 1024);
+    LOG_DEBUG("SD Card Size: %lluMB\n", cardSize);
+    LOG_DEBUG("Total space: %llu MB\n", SD.totalBytes() / (1024 * 1024));
+    LOG_DEBUG("Used space: %llu MB\n", SD.usedBytes() / (1024 * 1024));
+
+    if (SD.exists("/data.csv")) {
+        LOG_DEBUG("data.csv exists.");
+    } else {
+        LOG_DEBUG("data.csv doesn't exist.");
+    }
+
+    // open a new file and immediately close it:
+    LOG_DEBUG("Creating data.csv...");
+    sensorData = SD.open("data.csv", FILE_WRITE);
+    sensorData.close();
+
+    // Check to see if the file exists:
+    if (SD.exists("/data.csv")) {
+        LOG_DEBUG("data.csv exists.");
+    } else {
+        LOG_DEBUG("data.csv doesn't exist.");
+    }
+}
+
 void setup()
 {
     concurrency::hasBeenSetup = true;
@@ -649,6 +715,9 @@ void setup()
 
     // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
     setCPUFast(false); // 80MHz is fine for our slow peripherals
+
+    // SD card validation call TEMP DELETEME
+    initSdCard();
 }
 
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
