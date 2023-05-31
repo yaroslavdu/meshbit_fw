@@ -26,9 +26,9 @@ public:
     }
   }
   void reset() { values_.clear(); }
-  T min() { return *std::min_element(values_.begin(), values_.end()); }
-  T max() { return *std::max_element(values_.begin(), values_.end()); }
-  T avg() {
+  T min() const { return *std::min_element(values_.begin(), values_.end()); }
+  T max() const { return *std::max_element(values_.begin(), values_.end()); }
+  T avg() const {
     const T sum =
         std::accumulate(values_.begin(), values_.end(), T(0), std::plus<T>());
     const T avg = sum / static_cast<T>(std::max(values_.size(), size_t(1)));
@@ -40,6 +40,86 @@ private:
   size_t size_{0};
 };
 
+enum class MotionState { Moving, Still, LongStill, Unknown };
+
+class Mpu6050DataHandler {
+  using DataType = float;
+
+public:
+  const int sliding_window_length_{20};
+  const DataType min_acceleration_diff_when_moving{0.08};
+
+  void update_accelerations(DataType acceleration_x, DataType acceleration_y,
+                            DataType acceleration_z) {
+    // TODO: expand with angular momentums?
+    x_.update(acceleration_x);
+    y_.update(acceleration_y);
+    z_.update(acceleration_z);
+  }
+
+  void compute_motion_state() {
+    static constexpr DataType default_accel{0.0};
+    const DataType avg_x_accel = x_.avg();
+    const DataType avg_y_accel = y_.avg();
+    const DataType avg_z_accel = z_.avg();
+
+    if (avg_x_accel == default_accel and avg_y_accel == default_accel and
+        last_avg_z_accel_ == default_accel) {
+      // A true acceleration values for all axes can never be exactly zero,
+      // but if it is, it means the sensor is probably not working correctly.
+      motion_state_ = MotionState::Unknown;
+      return;
+    }
+
+    const DataType x_diff = std::abs(avg_x_accel - last_avg_x_accel_);
+    const DataType y_diff = std::abs(avg_y_accel - last_avg_y_accel_);
+    const DataType z_diff = std::abs(avg_z_accel - last_avg_z_accel_);
+
+    if (x_diff >= min_acceleration_diff_when_moving or
+        y_diff >= min_acceleration_diff_when_moving or
+        z_diff >= min_acceleration_diff_when_moving) {
+      motion_state_ = MotionState::Moving;
+      still_time_ = 0;
+    } else {
+      still_time_++;
+      if (still_time_ < long_still_time_threshold) {
+        motion_state_ = MotionState::Still;
+      } else {
+        motion_state_ = MotionState::LongStill;
+      }
+    }
+
+    last_avg_x_accel_ = avg_x_accel;
+    last_avg_y_accel_ = avg_y_accel;
+    last_avg_z_accel_ = avg_z_accel;
+  };
+
+  // Getters for retrieveing avg, min, max values per axis
+  const Filter<DataType> &x() { return x_; };
+  const Filter<DataType> &y() { return y_; };
+  const Filter<DataType> &z() { return z_; };
+
+  std::string motion_state_as_string() {
+    return motion_state_ == MotionState::Still       ? "still"
+           : motion_state_ == MotionState::Moving    ? "moving"
+           : motion_state_ == MotionState::LongStill ? "long_still"
+                                                     : "unknown";
+  }
+
+private:
+  Filter<DataType> x_{sliding_window_length_};
+  Filter<DataType> y_{sliding_window_length_};
+  Filter<DataType> z_{sliding_window_length_};
+
+  DataType last_avg_x_accel_{0};
+  DataType last_avg_y_accel_{0};
+  DataType last_avg_z_accel_{0};
+
+  MotionState motion_state_{MotionState::Unknown};
+  int still_time_{0};
+  const int long_still_time_threshold{10};
+};
+
 namespace concurrency
 {
 class AccelerometerThread : public concurrency::OSThread
@@ -47,10 +127,15 @@ class AccelerometerThread : public concurrency::OSThread
   public:
     AccelerometerThread(ScanI2C::DeviceType type = ScanI2C::DeviceType::NONE) : OSThread("AccelerometerThread")
     {
+        TwoWire *accelerometer_port_ptr = nullptr;
         if (accelerometer_found.port == ScanI2C::I2CPort::NO_I2C) {
             LOG_DEBUG("AccelerometerThread disabling due to no sensors found\n");
             disable();
             return;
+        } else if (accelerometer_found.port == ScanI2C::I2CPort::WIRE) {
+            accelerometer_port_ptr = &Wire;
+        } else {
+            accelerometer_port_ptr = &Wire1;
         }
 
         if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
@@ -63,7 +148,7 @@ class AccelerometerThread : public concurrency::OSThread
         LOG_DEBUG("AccelerometerThread initializing\n");
 
         if (accelerometer_type == ScanI2C::DeviceType::MPU6050 &&
-            mpu.begin(accelerometer_found.address, &Wire1)) {
+            mpu.begin(accelerometer_found.address, accelerometer_port_ptr)) {
             LOG_DEBUG("MPU6050 initializing\n");
             // setup motion detection
             mpu.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);
@@ -133,9 +218,8 @@ class AccelerometerThread : public concurrency::OSThread
             return;
         }
 
-        mpu6050_x_filter_.update(accel.acceleration.x);
-        mpu6050_y_filter_.update(accel.acceleration.y);
-        mpu6050_z_filter_.update(accel.acceleration.z);
+        mpu6050_data_handler_.update_accelerations(
+            accel.acceleration.x, accel.acceleration.y, accel.acceleration.z);
 
         if (report_counter_++ < reporting_period_) {
             return;
@@ -154,19 +238,24 @@ class AccelerometerThread : public concurrency::OSThread
         const string device_name{
             (owner.short_name[0] != '\0') ? owner.short_name : "undefined"};
 
+        mpu6050_data_handler_.compute_motion_state();
+
         // example:
-        // {"device":"theo","time":1684925523038,"x":1.046266,"y":7.283162,"z":-5.889736,"t":28.012352}
+        // {"device":"b034","time":1685533673943,"x":-9.234076,"y":1.325669,"z":1.327226,
+        //  "t":28.577059,"motion":"still"}
         string accel_message{"{"};
         accel_message += "\"device\":\"" + device_name + "\"";
         accel_message += ",\"time\":" + timestamp;
         accel_message += ",\"x\":";
-        accel_message += to_string(mpu6050_x_filter_.avg());
+        accel_message += to_string(mpu6050_data_handler_.x().avg());
         accel_message += ",\"y\":";
-        accel_message += to_string(mpu6050_y_filter_.avg());
+        accel_message += to_string(mpu6050_data_handler_.y().avg());
         accel_message += ",\"z\":";
-        accel_message += to_string(mpu6050_z_filter_.avg());
+        accel_message += to_string(mpu6050_data_handler_.z().avg());
         accel_message += ",\"t\":";
         accel_message += to_string(temp.temperature);
+        accel_message += ",\"motion\":\"" +
+                         mpu6050_data_handler_.motion_state_as_string() + "\"";
         accel_message += "}";
 
         LOG_INFO("%s\n", accel_message.c_str());
@@ -191,10 +280,7 @@ class AccelerometerThread : public concurrency::OSThread
 
     int report_counter_{0};
     const int reporting_period_{10};
-    const int accel_averaging_period_{20};
-    Filter<float> mpu6050_x_filter_{accel_averaging_period_};
-    Filter<float> mpu6050_y_filter_{accel_averaging_period_};
-    Filter<float> mpu6050_z_filter_{accel_averaging_period_};
+    Mpu6050DataHandler mpu6050_data_handler_;
 };
 
 } // namespace concurrency
