@@ -178,10 +178,11 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 #include <SD.h>
 void initSdCard() {
     LOG_DEBUG("\n\nSD card init start\n\n");
-    static constexpr auto HSPI_MISO = 13;
-    static constexpr auto HSPI_MOSI = 14;
-    static constexpr auto HSPI_SCLK = 25;
-    static constexpr auto HSPI_CS = 33;
+    static constexpr auto HSPI_MISO = 25;
+    static constexpr auto HSPI_MOSI = 33;
+    static constexpr auto HSPI_SCLK = 32;
+    static constexpr auto HSPI_CS = 15;
+    static const char *test_data_filename{"/data.csv"};
 
     SPIClass *hspi = nullptr;
     String dataString = ""; // holds the data to be written to the SD card
@@ -189,9 +190,8 @@ void initSdCard() {
 
     LOG_DEBUG("Instantiate SPIClass\n");
     hspi = new SPIClass(HSPI);
-    hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI,
-                HSPI_CS);     // SCLK, MISO, MOSI, SS
-    pinMode(HSPI_CS, OUTPUT); // HSPI SS
+    hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_CS);
+    pinMode(HSPI_CS, OUTPUT);
 
     LOG_DEBUG("Accessing SDCARD\n");
     // see if the card is present and can be initialized:
@@ -215,27 +215,31 @@ void initSdCard() {
         LOG_DEBUG("UNKNOWN\n");
     }
 
-    uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-    LOG_DEBUG("SD Card Size: %lu MB\n", cardSize);
-    LOG_DEBUG("Total space: %lu MB\n", SD.totalBytes() / (1024 * 1024));
-    LOG_DEBUG("Used space: %lu MB\n", SD.usedBytes() / (1024 * 1024));
+    static constexpr uint64_t bytes_in_mb{uint64_t(1024) * 1024};
+    const uint32_t cardSizeMB = static_cast<uint32_t>(SD.cardSize() / bytes_in_mb);
+    const uint32_t totalMegaBytes = static_cast<uint32_t>(SD.totalBytes() / bytes_in_mb);
+    const uint32_t usedMegaBytes = static_cast<uint32_t>(SD.usedBytes() / bytes_in_mb);
+    LOG_DEBUG("SD Card Size: %lu MB\n", cardSizeMB);
+    LOG_DEBUG("Total space: %lu MB\n", totalMegaBytes);
+    LOG_DEBUG("Used space: %lu MB\n", usedMegaBytes);
 
-    if (SD.exists("/data.csv")) {
-        LOG_DEBUG("data.csv exists.\n");
+    if (SD.exists(test_data_filename)) {
+        LOG_DEBUG("%s exists, removing.\n", test_data_filename);
+        SD.remove(test_data_filename);
     } else {
-        LOG_DEBUG("data.csv doesn't exist.\n");
+        LOG_DEBUG("%s doesn't exist.\n", test_data_filename);
     }
 
     // open a new file and immediately close it:
-    LOG_DEBUG("Creating data.csv...\n");
-    sensorData = SD.open("/data.csv", FILE_WRITE);
+    LOG_DEBUG("Creating %s...\n", test_data_filename);
+    sensorData = SD.open(test_data_filename, FILE_WRITE);
     sensorData.close();
 
     // Check to see if the file exists:
-    if (SD.exists("/data.csv")) {
-        LOG_DEBUG("data.csv exists.\n");
+    if (SD.exists(test_data_filename)) {
+        LOG_DEBUG("%s exists.\n", test_data_filename);
     } else {
-        LOG_DEBUG("data.csv doesn't exist.\n");
+        LOG_DEBUG("%s doesn't exist.\n", test_data_filename);
     }
 }
 
