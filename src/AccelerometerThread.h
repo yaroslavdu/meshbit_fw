@@ -227,10 +227,9 @@ class AccelerometerThread : public concurrency::OSThread
         report_counter_ = 0;
 
         string timestamp;
-        const uint64_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
-        static constexpr uint64_t millis_in_second{1000};
+        const uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
         if (rtc_sec > 0) {
-            timestamp = to_string(rtc_sec * millis_in_second + millis());
+            timestamp = to_string(rtc_sec);
         } else {
             timestamp = "\"undefined\"";
         }
