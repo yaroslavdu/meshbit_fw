@@ -95,15 +95,19 @@ public:
   };
 
   // Getters for retrieveing avg, min, max values per axis
-  const Filter<DataType> &x() { return x_; };
-  const Filter<DataType> &y() { return y_; };
-  const Filter<DataType> &z() { return z_; };
+  const Filter<DataType> &x() const { return x_; };
+  const Filter<DataType> &y() const { return y_; };
+  const Filter<DataType> &z() const { return z_; };
 
-  std::string motion_state_as_string() {
+  std::string motion_state_as_string() const {
     return motion_state_ == MotionState::Still       ? "still"
            : motion_state_ == MotionState::Moving    ? "moving"
            : motion_state_ == MotionState::LongStill ? "long_still"
                                                      : "unknown";
+  }
+
+  MotionState motion_state() const {
+    return motion_state_;
   }
 
 private:
@@ -234,14 +238,10 @@ class AccelerometerThread : public concurrency::OSThread
             timestamp = "\"undefined\"";
         }
 
-        const string device_name{
-            (owner.short_name[0] != '\0') ? owner.short_name : "undefined"};
-
         mpu6050_data_handler_.compute_motion_state();
 
         // example:
-        // {"device":"b034","time":1685533673943,"x":-9.234076,"y":1.325669,"z":1.327226,
-        //  "t":28.577059,"motion":"still"}
+        // {"device":"boro","time":1686137270,"x":-8.753799,"y":3.092950,"z":1.686955,"t":28.435883,"motion":"long_still"}
         string accel_message{"{"};
         accel_message += "\"device\":\"" + device_name + "\"";
         accel_message += ",\"time\":" + timestamp;
@@ -259,18 +259,52 @@ class AccelerometerThread : public concurrency::OSThread
 
         LOG_INFO("%s\n", accel_message.c_str());
 
+        publishAccelDataToMqtt(accel_message);
+
+        publishNewMotionStateToMesh(mpu6050_data_handler_);
+    }
+
+    /// @brief Publishes acceleration statistics message to MQTT if available
+    /// @param message
+    void publishAccelDataToMqtt(const std::string &message) {
         if (mqtt && mqtt->connected()) {
-            string topic;
+            std::string topic;
             if (*moduleConfig.mqtt.root) {
                 topic += moduleConfig.mqtt.root;
             }
             // TODO: decide on a better topic name or a configurable topic name
             // if necessary
             topic += "/accelerometer";
-            mqtt->debugPublish(topic.c_str(), accel_message.c_str());
+            mqtt->debugPublish(topic.c_str(), message.c_str());
         } else {
             LOG_DEBUG("MQTT is not connected\n");
         }
+    }
+
+    /// @brief Publishes a motion state to the lora mesh only when
+    ///        when the state has been recently changed
+    /// @param state
+    void publishNewMotionStateToMesh(
+        const Mpu6050DataHandler &mpu6050_data_handler) {
+        static MotionState last_state{MotionState::Unknown};
+        const MotionState new_state = mpu6050_data_handler.motion_state();
+        if (last_state == new_state) {
+            return;
+        }
+        const std::string message =
+            device_name + ":" + mpu6050_data_handler.motion_state_as_string();
+        last_state = new_state;
+
+        meshtastic_MeshPacket *p = router->allocForSending();
+
+        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        p->channel = 2;
+
+        p->decoded.payload.size = message.size();
+        memcpy(p->decoded.payload.bytes, message.c_str(),
+               p->decoded.payload.size);
+
+        service.sendToMesh(p);
     }
 
     ScanI2C::DeviceType accelerometer_type;
@@ -278,8 +312,11 @@ class AccelerometerThread : public concurrency::OSThread
     Adafruit_LIS3DH lis;
 
     int report_counter_{0};
-    const int reporting_period_{10};
+    const int reporting_period_{20}; // ~ in 0.1 seconds, empirycally
     Mpu6050DataHandler mpu6050_data_handler_;
+
+    const std::string device_name{
+            (owner.short_name[0] != '\0') ? owner.short_name : "undefined"};
 };
 
 } // namespace concurrency
