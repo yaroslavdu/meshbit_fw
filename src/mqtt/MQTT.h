@@ -61,6 +61,11 @@ class MQTT : private concurrency::OSThread
 
     bool connected();
 
+    // A wrapper for publishing not only Meshtastic but any deliberate text message to mqtt
+    bool debugPublish(const char* topic, const char* payload) {
+      return pubSub.publish(topic, payload);
+    }
+
   protected:
     PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;
 
