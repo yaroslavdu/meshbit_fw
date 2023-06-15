@@ -1,4 +1,4 @@
-// #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
+#define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
 #define I2C_SDA 21
 #define I2C_SCL 22
@@ -6,7 +6,8 @@
 #define I2C_SDA1 4 // 13
 #define I2C_SCL1 0 // 14
 
-#define BUTTON_PIN 38 // The middle button GPIO on the T-Beam
+#define BUTTON_PIN 35 // 38 // The middle button GPIO on the T-Beam
+
 //#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
 // anywhere.
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
@@ -41,3 +42,6 @@
 // #define PMU_IRQ 35
 #define HAS_AXP192
 #define GPS_UBLOX
+
+#define MOTION_STATUS_MESHTASTIC_CHANNEL_NUM 2
+#define SOS_SIGNAL_MESHTASTIC_CHANNEL_NUM 2

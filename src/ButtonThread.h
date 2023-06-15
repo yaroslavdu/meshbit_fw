@@ -172,6 +172,7 @@ class ButtonThread : public concurrency::OSThread
         config.position.gps_enabled = !(config.position.gps_enabled);
         doGPSpowersave(config.position.gps_enabled);
 #endif
+        sendSosToMesh();
     }
 
     static void userButtonPressedLongStart()
@@ -193,6 +194,23 @@ class ButtonThread : public concurrency::OSThread
                 power->shutdown();
             }
         }
+    }
+
+    static void sendSosToMesh() {
+        LOG_DEBUG("Triple button click --> SOS sending to mesh requested.\n");
+        static const std::string device_name{
+            (owner.short_name[0] != '\0') ? owner.short_name : "undefined"};
+        static const std::string message{device_name + ":SOS"};
+        meshtastic_MeshPacket *p = router->allocForSending();
+
+        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        p->channel = SOS_SIGNAL_MESHTASTIC_CHANNEL_NUM;
+
+        p->decoded.payload.size = message.size();
+        memcpy(p->decoded.payload.bytes, message.c_str(),
+               p->decoded.payload.size);
+
+        service.sendToMesh(p);
     }
 };
 
