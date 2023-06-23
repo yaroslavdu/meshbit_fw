@@ -40,15 +40,25 @@ private:
   size_t size_{0};
 };
 
-enum class MotionState { Moving, Still, LongStill, Unknown };
+enum class MotionState { Moving, Still, Unknown };
 
 class Mpu6050DataHandler {
   using DataType = float;
 
 public:
   const int sliding_window_length_{20};
-  const DataType min_acceleration_diff_when_moving{0.08};
+  const DataType min_acceleration_diff_when_moving{0.03};
+  
+  // These thresholds defines on which iterative update (aka cycle)
+  // of the filter will the motion status change; if the method
+  // compute_motion_state() is called ~1/sec, a value of 15 for the
+  // thresholds means there should be ~15 seconds of continuous
+  // movement above the minimal diff to switch from Still to Moving
+  // and, respectively, ~15 seconds of no movement to go to Still state.
+  const int moving_to_still_threshold{15};
+  const int still_to_moving_threshold{15};
 
+  // Is better to be called as often as possible
   void update_accelerations(DataType acceleration_x, DataType acceleration_y,
                             DataType acceleration_z) {
     // TODO: expand with angular momentums?
@@ -57,6 +67,7 @@ public:
     z_.update(acceleration_z);
   }
 
+  // Is better to be called around once per second
   void compute_motion_state() {
     static constexpr DataType default_accel{0.0};
     const DataType avg_x_accel = x_.avg();
@@ -75,17 +86,21 @@ public:
     const DataType y_diff = std::abs(avg_y_accel - last_avg_y_accel_);
     const DataType z_diff = std::abs(avg_z_accel - last_avg_z_accel_);
 
-    if (x_diff >= min_acceleration_diff_when_moving or
-        y_diff >= min_acceleration_diff_when_moving or
-        z_diff >= min_acceleration_diff_when_moving) {
-      motion_state_ = MotionState::Moving;
-      still_time_ = 0;
+    const bool is_now_moving = x_diff >= min_acceleration_diff_when_moving or
+                               y_diff >= min_acceleration_diff_when_moving or
+                               z_diff >= min_acceleration_diff_when_moving;
+
+    if (is_now_moving) {
+      still_cycles_ = 0;
+      moving_cycles_++;
+      if (moving_cycles_ > still_to_moving_threshold) {
+        motion_state_ = MotionState::Moving;
+      }
     } else {
-      still_time_++;
-      if (still_time_ < long_still_time_threshold) {
+      moving_cycles_ = 0;
+      still_cycles_++;
+      if (still_cycles_ > moving_to_still_threshold) {
         motion_state_ = MotionState::Still;
-      } else {
-        motion_state_ = MotionState::LongStill;
       }
     }
 
@@ -102,7 +117,6 @@ public:
   std::string motion_state_as_string() const {
     return motion_state_ == MotionState::Still       ? "still"
            : motion_state_ == MotionState::Moving    ? "moving"
-           : motion_state_ == MotionState::LongStill ? "long_still"
                                                      : "unknown";
   }
 
@@ -120,8 +134,8 @@ private:
   DataType last_avg_z_accel_{0};
 
   MotionState motion_state_{MotionState::Unknown};
-  int still_time_{0};
-  const int long_still_time_threshold{10};
+  int still_cycles_{0};
+  int moving_cycles_{0};
 };
 
 namespace concurrency
@@ -241,7 +255,7 @@ class AccelerometerThread : public concurrency::OSThread
         mpu6050_data_handler_.compute_motion_state();
 
         // example:
-        // {"device":"boro","time":1686137270,"x":-8.753799,"y":3.092950,"z":1.686955,"t":28.435883,"motion":"long_still"}
+        // {"device":"boro","time":1686137270,"x":-8.753799,"y":3.092950,"z":1.686955,"t":28.435883,"motion":"still"}
         string accel_message{"{"};
         accel_message += "\"device\":\"" + device_name + "\"";
         accel_message += ",\"time\":" + timestamp;
