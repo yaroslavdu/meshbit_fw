@@ -3,6 +3,14 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 
+#ifdef HAS_SDCARD
+#include <SD.h>
+#include <FS.h>
+#include <FSCommon.h>
+#endif
+
+#include "SDCardLogger.h"
+
 #define Port Serial
 // Defaulting to the formerly removed phone_timeout_secs value of 15 minutes
 #define SERIAL_CONNECTION_TIMEOUT (15 * 60) * 1000UL
@@ -11,7 +19,12 @@ SerialConsole *console;
 
 void consoleInit()
 {
-    new SerialConsole(); // Must be dynamically allocated because we are now inheriting from thread
+  // Must be dynamically allocated because we are now inheriting from thread
+#ifdef HAS_SDCARD
+  new SerialAndFileConsole();
+#else
+  new SerialConsole();
+#endif
 }
 
 void consolePrintf(const char *format, ...)
@@ -77,5 +90,64 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
         return StreamAPI::handleToRadio(buf, len);
     } else {
         return false;
+    }
+}
+
+SerialAndFileConsole::SerialAndFileConsole() : SerialConsole() {}
+
+bool SerialAndFileConsole::tryStartingLogInFile(const char* filepath) {
+    logfile_ = new fs::File();
+    *logfile_ = SD.open(filepath, FILE_APPEND);
+    if (*logfile_) {
+        logfile_->write('#');
+        logfile_->flush();
+        return true;
+    } else {
+        delete logfile_;
+        logfile_ = nullptr;
+    }
+
+    return false;
+}
+
+void SerialAndFileConsole::writeToFileWithCaching(uint8_t c) {
+    /*cache_.emplace_back(c);
+    if (cache_.size() < cache_limit_) {
+        return;
+    }
+    if (not logfile_ or not *logfile_) {
+        SerialConsole::write('\n');
+        SerialConsole::write('\n');
+        if (tryStartingLogInFile("/default_log.txt"))
+            SerialConsole::write('!');
+        else
+            SerialConsole::write('?');
+        SerialConsole::write('\n');
+        SerialConsole::write('\n');
+    } 
+    //auto logfile = SD.open("/default_log.txt", FILE_WRITE, true);
+    if (logfile_ and *logfile_) {
+        logfile_->write(cache_.data(), cache_.size());
+        //logfile_->flush();
+        //logfile.close();
+    }
+    SerialConsole::write('\n');
+    SerialConsole::write('\n');
+    SerialConsole::write('#');
+    SerialConsole::write('\n');
+    
+    
+    cache_.clear();*/
+    if (sd_card_log_writer) {
+        sd_card_log_writer->append(c);
+    }
+}
+
+SerialAndFileConsole::~SerialAndFileConsole() {
+    // TODO: ensure closing the file handle correctly
+    if (logfile_ and *logfile_) {
+        logfile_->close();
+        delete logfile_;
+        logfile_ = nullptr;
     }
 }
