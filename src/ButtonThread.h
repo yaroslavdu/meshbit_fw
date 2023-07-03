@@ -124,9 +124,24 @@ class ButtonThread : public concurrency::OSThread
     }
     static void userButtonPressedLong()
     {
-        // LOG_DEBUG("Long press!\n");
-        // If user button is held down for 5 seconds, shutdown the device.
-        if ((millis() - longPressTime > 5000) && (longPressTime > 0)) {
+        static constexpr int thirty_seconds{30000};
+        static constexpr int three_seconds{3000};
+        static constexpr int millis_inaccuracy{50};
+
+        if (longPressTime <= 0) {
+            return;
+        }
+        const int elapsed = millis() - longPressTime;
+
+        // If user button is held down for 3 seconds, send SOS signal to mesh
+        // and continue sending each 3 seconds while the button is held down.
+        if ((elapsed > three_seconds) and
+            (elapsed % three_seconds) < millis_inaccuracy) {
+            sendSosToMesh();
+        }
+
+        // If user button is held down for 30 seconds, shutdown the device.
+        if (elapsed > thirty_seconds) {
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32)
             // Do actual shutdown when button released, otherwise the button release
             // may wake the board immediatedly.
@@ -146,8 +161,6 @@ class ButtonThread : public concurrency::OSThread
                 shutdown_on_long_stop = true;
             }
 #endif
-        } else {
-            // LOG_DEBUG("Long press %u\n", (millis() - longPressTime));
         }
     }
 
@@ -197,10 +210,14 @@ class ButtonThread : public concurrency::OSThread
     }
 
     static void sendSosToMesh() {
-        LOG_DEBUG("Triple button click --> SOS sending to mesh requested.\n");
         static const std::string device_name{
             (owner.short_name[0] != '\0') ? owner.short_name : "undefined"};
         static const std::string message{device_name + ":SOS"};
+
+        LOG_DEBUG("Triple or long button click --> SOS sending to mesh requested.\n");
+
+        screen->blink();
+
         meshtastic_MeshPacket *p = router->allocForSending();
 
         p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
