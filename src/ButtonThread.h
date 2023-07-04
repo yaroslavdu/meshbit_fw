@@ -212,7 +212,7 @@ class ButtonThread : public concurrency::OSThread
     static void sendSosToMesh() {
         static const std::string device_name{
             (owner.short_name[0] != '\0') ? owner.short_name : "undefined"};
-        static const std::string message{device_name + ":SOS"};
+        static const std::string message{/*device_name + */"SOS"};
 
         LOG_DEBUG("Triple or long button click --> SOS sending to mesh requested.\n");
 

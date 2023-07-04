@@ -55,8 +55,8 @@ public:
   // thresholds means there should be ~15 seconds of continuous
   // movement above the minimal diff to switch from Still to Moving
   // and, respectively, ~15 seconds of no movement to go to Still state.
-  const int moving_to_still_threshold{15};
-  const int still_to_moving_threshold{15};
+  const int moving_to_still_threshold{10};
+  const int still_to_moving_threshold{10};
 
   // Is better to be called as often as possible
   void update_accelerations(DataType acceleration_x, DataType acceleration_y,
@@ -115,8 +115,8 @@ public:
   const Filter<DataType> &z() const { return z_; };
 
   std::string motion_state_as_string() const {
-    return motion_state_ == MotionState::Still       ? "still"
-           : motion_state_ == MotionState::Moving    ? "moving"
+    return motion_state_ == MotionState::Still       ? "NOT MOVING"
+           : motion_state_ == MotionState::Moving    ? "MOVING"
                                                      : "unknown";
   }
 
@@ -305,8 +305,7 @@ class AccelerometerThread : public concurrency::OSThread
         if (last_state == new_state) {
             return;
         }
-        const std::string message =
-            device_name + ":" + mpu6050_data_handler.motion_state_as_string();
+        const std::string message = /*device_name + ":" + */mpu6050_data_handler.motion_state_as_string();
         last_state = new_state;
 
         meshtastic_MeshPacket *p = router->allocForSending();
