@@ -1,7 +1,5 @@
 #include "SDCardLogger.h"
-#include "NodeDB.h"
-#include "PowerFSM.h"
-#include "configuration.h"
+#include "RTC.h"
 
 #ifdef HAS_SDCARD
 #include <FS.h>
@@ -24,10 +22,12 @@ SDCardLogger::SDCardLogger() : concurrency::OSThread("SDCardLogger") {
 
   setupSDCard();
 
-  if (SD.exists(default_log_filename)) {
-    auto f = SD.open(default_log_filename, FILE_READ);
+  const auto path = "/default.txt";
+  // current_log_file_path().c_str();
+  if (SD.exists(path)) {
+    auto f = SD.open(path, FILE_READ, true);
     if (f) {
-      LOG_DEBUG("Default log file exists, size: %d\n", f.available());
+      LOG_DEBUG("Log file at %s exists, size: %d\n", path, f.available());
     }
     f.close();
   }
@@ -37,17 +37,36 @@ int32_t SDCardLogger::runOnce() {
   if (cache_.size() < cache_limit) {
     return 0;
   }
-
-  auto logfile = SD.open(default_log_filename, FILE_APPEND);
+  const auto path = current_log_file_path().c_str();
+  auto logfile = SD.open(path, FILE_WRITE, true);
   if (logfile) {
     logfile.write(cache_.data(), cache_.size());
+    logfile.close();
+    LOG_DEBUG("Dumped console log to SD card.\n");
+  } else {
+    LOG_WARN("Can't open log file %s on SD card!\n", path);
   }
-  logfile.close();
 
   cache_.clear();
 
-  LOG_DEBUG("Dumped console log to SD card.\n");
   return 0;
+}
+
+const std::string &SDCardLogger::current_log_file_path() const {
+  static constexpr uint32_t seconds_in_day{86400};
+  static constexpr uint32_t seconds_in_hour{3600};
+  static constexpr uint32_t seconds_in_minute{60};
+  static constexpr uint32_t new_log_file_period{seconds_in_hour};
+
+  const uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
+
+  if (rtc_sec > (last_file_timestamp_ + new_log_file_period)) {
+    last_file_timestamp_ = rtc_sec;
+    current_path_ =
+        log_folder + std::to_string(last_file_timestamp_) + log_file_extension;
+  }
+
+  return current_path_;
 }
 
 void SDCardLogger::append(uint8_t c) { cache_.emplace_back(c); }
