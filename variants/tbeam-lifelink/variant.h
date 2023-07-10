@@ -10,7 +10,7 @@
 
 //#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
 // anywhere.
-//#define EXT_NOTIFY_OUT 35 // 13 // Default pin to use for Ext Notify Module.
+//#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
 #define LED_INVERTED 1
 #define LED_PIN 4 // Newer tbeams (1.1) have an extra led on GPIO4

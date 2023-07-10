@@ -2,7 +2,6 @@
 #include "RTC.h"
 
 #ifdef HAS_SDCARD
-#include <FS.h>
 #include <FSCommon.h>
 #include <SD.h>
 #endif
@@ -22,8 +21,7 @@ SDCardLogger::SDCardLogger() : concurrency::OSThread("SDCardLogger") {
 
   setupSDCard();
 
-  const auto path = "/default.txt";
-  // current_log_file_path().c_str();
+  const auto path = current_log_file_path().c_str();
   if (SD.exists(path)) {
     auto f = SD.open(path, FILE_READ, true);
     if (f) {
@@ -37,8 +35,9 @@ int32_t SDCardLogger::runOnce() {
   if (cache_.size() < cache_limit) {
     return 0;
   }
+
   const auto path = current_log_file_path().c_str();
-  auto logfile = SD.open(path, FILE_WRITE, true);
+  auto logfile = SD.open(path, FILE_APPEND, true);
   if (logfile) {
     logfile.write(cache_.data(), cache_.size());
     logfile.close();
@@ -69,6 +68,12 @@ const std::string &SDCardLogger::current_log_file_path() const {
   return current_path_;
 }
 
-void SDCardLogger::append(uint8_t c) { cache_.emplace_back(c); }
+void SDCardLogger::append(uint8_t c) {
+  // TODO: protect this with a mutex/lock if the log is corrupted.
+  // For now I don't see a necessity to protect it, as emplacing
+  // is quite fast while cache dump occurs rarely and the time
+  // spent in a lock acquiring would be just lost.
+  cache_.emplace_back(c);
+}
 
 SDCardLogger::~SDCardLogger() {}
