@@ -220,7 +220,7 @@ class ButtonThread : public concurrency::OSThread
 
         meshtastic_MeshPacket *p = router->allocForSending();
 
-        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        p->decoded.portnum = lifelink_PortNum_STATUS;
         p->channel = SOS_SIGNAL_MESHTASTIC_CHANNEL_NUM;
 
         p->decoded.payload.size = message.size();

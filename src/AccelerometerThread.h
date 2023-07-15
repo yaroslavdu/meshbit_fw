@@ -314,7 +314,7 @@ class AccelerometerThread : public concurrency::OSThread
 
         meshtastic_MeshPacket *p = router->allocForSending();
 
-        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        p->decoded.portnum = lifelink_PortNum_STATUS;
         p->channel = MOTION_STATUS_MESHTASTIC_CHANNEL_NUM;
 
         p->decoded.payload.size = message.size();

@@ -94,6 +94,8 @@ typedef enum _meshtastic_PortNum {
     /* ATAK Forwarder Module https://github.com/paulmandal/atak-forwarder */
     meshtastic_PortNum_ATAK_FORWARDER = 257,
     /* Currently we limit port nums to no higher than this value */
+    lifelink_PortNum_STATUS = 500,
+    /* Currently we limit port nums to no higher than this value */
     meshtastic_PortNum_MAX = 511
 } meshtastic_PortNum;
 
