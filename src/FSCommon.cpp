@@ -10,6 +10,11 @@ SPIClass SPI1(HSPI);
 #define SDHandler SPI1
 #endif
 
+#ifdef SDCARD_USE_SPI2
+SPIClass SPI2(HSPI);
+#define SDHandler SPI2
+#endif
+
 #endif // HAS_SDCARD
 
 bool copyFile(const char *from, const char *to)
@@ -183,9 +188,10 @@ void fsInit()
 void setupSDCard()
 {
 #ifdef HAS_SDCARD
-    SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
+    SDHandler.begin(SD_SPI_SCLK, SD_SPI_MISO, SD_SPI_MOSI, SD_SPI_CS);
+    pinMode(SD_SPI_CS, OUTPUT);
 
-    if (!SD.begin(SDCARD_CS, SDHandler)) {
+    if (!SD.begin(SD_SPI_CS, SDHandler)) {
         LOG_DEBUG("No SD_MMC card detected\n");
         return;
     }
@@ -205,9 +211,12 @@ void setupSDCard()
         LOG_DEBUG("UNKNOWN\n");
     }
 
-    uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-    LOG_DEBUG("SD Card Size: %lluMB\n", cardSize);
-    LOG_DEBUG("Total space: %llu MB\n", SD.totalBytes() / (1024 * 1024));
-    LOG_DEBUG("Used space: %llu MB\n", SD.usedBytes() / (1024 * 1024));
+    static constexpr uint64_t bytes_in_mb{uint64_t(1024) * 1024};
+    const uint32_t cardSizeMB = static_cast<uint32_t>(SD.cardSize() / bytes_in_mb);
+    const uint32_t totalMegaBytes = static_cast<uint32_t>(SD.totalBytes() / bytes_in_mb);
+    const uint32_t usedMegaBytes = static_cast<uint32_t>(SD.usedBytes() / bytes_in_mb);
+    LOG_DEBUG("SD Card Size: %lu MB\n", cardSizeMB);
+    LOG_DEBUG("Total space: %lu MB\n", totalMegaBytes);
+    LOG_DEBUG("Used space: %lu MB\n", usedMegaBytes);
 #endif
 }

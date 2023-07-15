@@ -6,25 +6,33 @@
 #define I2C_SDA1 4 // 13
 #define I2C_SCL1 0 // 14
 
-#define BUTTON_PIN 35 // 38 // The middle button GPIO on the T-Beam
+#define BUTTON_PIN 15 // 38 // The middle button GPIO on the T-Beam
 
 //#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
 // anywhere.
-#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
+//#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
 #define LED_INVERTED 1
 #define LED_PIN 4 // Newer tbeams (1.1) have an extra led on GPIO4
 
+// SDcard is set to use SPI2 (vspi) on pins:
+#define HAS_SDCARD
+#define SDCARD_USE_SPI2
+#define SD_SPI_MISO 13 // 25
+#define SD_SPI_MOSI 14 // 33
+#define SD_SPI_SCLK 25 // 32
+#define SD_SPI_CS 32 // 15 // 33
+
 // TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262
 #define USE_RF95 // RFM95/SX127x
-#define USE_SX1262
-#define USE_SX1268
+//#define USE_SX1262
+//#define USE_SX1268
 
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 23
 #define LORA_DIO1 33 // SX1262 IRQ
-#define LORA_DIO2 32 // SX1262 BUSY
+//#define LORA_DIO2 32 // SX1262 BUSY
 #define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
 #ifdef USE_SX1262

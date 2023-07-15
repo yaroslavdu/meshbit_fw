@@ -290,8 +290,12 @@ class AccelerometerThread : public concurrency::OSThread
             // if necessary
             topic += "/accelerometer";
             mqtt->debugPublish(topic.c_str(), message.c_str());
+            mqtt_warning_counter_ = 0;
         } else {
-            LOG_DEBUG("MQTT is not connected\n");
+            if (mqtt_warning_counter_++ > mqtt_warning_period_) {
+              LOG_WARN("MQTT is not connected\n");
+              mqtt_warning_counter_ = 0;
+            }
         }
     }
 
@@ -327,6 +331,8 @@ class AccelerometerThread : public concurrency::OSThread
     int report_counter_{0};
     const int reporting_period_{20}; // ~ in 0.1 seconds, empirycally
     Mpu6050DataHandler mpu6050_data_handler_;
+    int mqtt_warning_counter_{0};
+    const int mqtt_warning_period_{20};
 
     const std::string device_name{
             (owner.short_name[0] != '\0') ? owner.short_name : "undefined"};
