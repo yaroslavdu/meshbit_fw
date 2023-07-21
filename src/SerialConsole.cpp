@@ -3,6 +3,11 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 
+#ifdef HAS_SDCARD
+#include "SDCardLogger.h"
+#endif
+
+
 #define Port Serial
 // Defaulting to the formerly removed phone_timeout_secs value of 15 minutes
 #define SERIAL_CONNECTION_TIMEOUT (15 * 60) * 1000UL
@@ -11,7 +16,12 @@ SerialConsole *console;
 
 void consoleInit()
 {
-    new SerialConsole(); // Must be dynamically allocated because we are now inheriting from thread
+  // Must be dynamically allocated because we are now inheriting from thread
+#ifdef HAS_SDCARD
+  new SerialAndFileConsole();
+#else
+  new SerialConsole();
+#endif
 }
 
 void consolePrintf(const char *format, ...)
@@ -78,4 +88,14 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
     } else {
         return false;
     }
+}
+
+SerialAndFileConsole::SerialAndFileConsole() : SerialConsole() {}
+
+void SerialAndFileConsole::writeToFileWithCaching(uint8_t c) {
+#ifdef HAS_SDCARD
+    if (sd_card_log_writer) {
+        sd_card_log_writer->append(c);
+    }
+#endif
 }

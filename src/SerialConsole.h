@@ -2,6 +2,7 @@
 
 #include "RedirectablePrint.h"
 #include "StreamAPI.h"
+
 /**
  * Provides both debug printing and, if the client starts sending protobufs to us, switches to send/receive protobufs
  * (and starts dropping debug printing - FIXME, eventually those prints should be encapsulated in protobufs).
@@ -36,5 +37,27 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
 // A simple wrapper to allow non class aware code write to the console
 void consolePrintf(const char *format, ...);
 void consoleInit();
+
+/**
+ * Provides both debug printing and, if the client starts sending protobufs to us, switches to send/receive protobufs
+ * (and starts dropping debug printing - FIXME, eventually those prints should be encapsulated in protobufs).
+ */
+class SerialAndFileConsole : public SerialConsole {
+  public:
+    using SerialConsole::checkIsConnected;
+    using SerialConsole::flush;
+    using SerialConsole::handleToRadio;
+    using SerialConsole::runOnce;
+
+    SerialAndFileConsole();
+
+    virtual size_t write(uint8_t c) override {
+        writeToFileWithCaching(c);
+        return SerialConsole::write(c);
+    }
+
+  private:
+    void writeToFileWithCaching(uint8_t c);
+};
 
 extern SerialConsole *console;

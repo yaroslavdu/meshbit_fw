@@ -72,6 +72,10 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "AccelerometerThread.h"
 #endif
 
+#ifdef HAS_SDCARD
+#include "SDCardLogger.h"
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -384,10 +388,6 @@ void setup()
 
     i2cScanner.reset();
 
-#ifdef HAS_SDCARD
-    setupSDCard();
-#endif
-
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
@@ -453,6 +453,10 @@ void setup()
     // ESP32
     SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     SPI.setFrequency(4000000);
+#endif
+
+#ifdef HAS_SDCARD
+    sdCardLogWriterInit();
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
