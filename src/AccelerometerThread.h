@@ -309,8 +309,8 @@ class AccelerometerThread : public concurrency::OSThread
         if (last_state == new_state) {
             return;
         }
-        const std::string message = /*device_name + ":" + */mpu6050_data_handler.motion_state_as_string();
         last_state = new_state;
+        const std::string message = /*device_name + ":" + */mpu6050_data_handler.motion_state_as_string();
 
         meshtastic_MeshPacket *p = router->allocForSending();
 
